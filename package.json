@@ -1,0 +1,61 @@
+{
+  "name": "oxevy-luncher",
+  "version": "1.0.0",
+  "description": "Oxevy Minecraft Launcher with Fabric support",
+  "author": "Oxevy Team",
+  "main": "src/main/main.cjs",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "start": "npm run build && electron .",
+    "start:electron": "electron . --dev-server=http://127.0.0.1:3000",
+    "dev:all": "concurrently \"npm run dev\" \"wait-on http://127.0.0.1:3000 && npm run start:electron\"",
+    "pack:linux": "electron-builder --linux",
+    "pack:win": "electron-builder --win",
+    "pack:all": "electron-builder --linux --win"
+  },
+  "dependencies": {
+    "clsx": "^2.1.1",
+    "electron-is-dev": "^3.0.1",
+    "framer-motion": "^11.2.10",
+    "lucide-react": "^0.395.0",
+    "minecraft-launcher-core": "^3.0.2",
+    "node-fetch": "^2.7.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "tailwind-merge": "^2.3.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.1",
+    "autoprefixer": "^10.4.19",
+    "concurrently": "^8.2.2",
+    "electron": "^31.0.1",
+    "electron-builder": "^24.13.3",
+    "postcss": "^8.4.38",
+    "tailwindcss": "^3.4.4",
+    "vite": "^5.3.1",
+    "wait-on": "^7.2.0"
+  },
+  "build": {
+    "appId": "com.oxevy.luncher",
+    "productName": "Oxevy Launcher",
+    "directories": {
+      "output": "dist-electron"
+    },
+    "icon": "assets/icon.svg",
+    "files": [
+      "dist/**/*",
+      "src/main/**/*",
+      "node_modules/minecraft-launcher-core/**/*",
+      "node_modules/node-fetch/**/*"
+    ],
+    "linux": {
+      "target": "AppImage",
+      "category": "Game"
+    },
+    "win": {
+      "target": "nsis",
+      "icon": "assets/icon.png"
+    }
+  }
+}
