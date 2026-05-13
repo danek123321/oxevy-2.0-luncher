@@ -12,11 +12,16 @@
     "dev:all": "concurrently \"npm run dev\" \"wait-on http://127.0.0.1:3000 && npm run start:electron\"",
     "pack:linux": "electron-builder --linux",
     "pack:win": "electron-builder --win",
-    "pack:all": "electron-builder --linux --win"
+    "pack:all": "electron-builder --linux --win",
+    "install:linux": "cd ../scripts && bash install-linux.sh",
+    "install:win": "cd ../scripts && install-win.bat"
   },
   "dependencies": {
     "clsx": "^2.1.1",
+    "cors": "^2.8.6",
+    "dotenv": "^17.4.2",
     "electron-is-dev": "^3.0.1",
+    "express": "^5.2.1",
     "framer-motion": "^11.2.10",
     "lucide-react": "^0.395.0",
     "minecraft-launcher-core": "^3.0.2",
@@ -42,7 +47,7 @@
     "directories": {
       "output": "dist-electron"
     },
-    "icon": "assets/icon.svg",
+    "icon": "../assets/icon.svg",
     "files": [
       "dist/**/*",
       "src/main/**/*",
@@ -55,7 +60,7 @@
     },
     "win": {
       "target": "nsis",
-      "icon": "assets/icon.png"
+      "icon": "../assets/icon.ico"
     }
   }
 }

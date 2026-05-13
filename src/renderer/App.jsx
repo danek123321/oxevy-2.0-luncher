@@ -1,9 +1,160 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { X, Minus } from 'lucide-react';
+
+// Key Login Form - two steps: nickname then key
+function KeyLogin({ onLogin }) {
+  const [step, setStep] = useState(1); // 1 = nickname, 2 = key
+  const [nickname, setNickname] = useState('');
+  const [nicknameLoading, setNicknameLoading] = useState(false);
+  const [key, setKey] = useState('');
+  const [keyLoading, setKeyLoading] = useState(false);
+  const [generatedKey, setGeneratedKey] = useState(null);
+  const [error, setError] = useState(null);
+
+  const handleGetKey = async (e) => {
+    e.preventDefault();
+    if (!nickname.trim()) return;
+    setNicknameLoading(true);
+    setError(null);
+    try {
+      const res = await fetch('http://localhost:3030/api/get-key', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nickname: nickname.trim() })
+      });
+      const data = await res.json();
+      if (!data.key) {
+        setError(data.error || 'Failed to get key.');
+        setNicknameLoading(false);
+        return;
+      }
+      setGeneratedKey(data.key);
+      setStep(2);
+    } catch {
+      setError('Could not connect to key server.');
+    }
+    setNicknameLoading(false);
+  };
+
+  const handleLogin = async (e) => {
+    e.preventDefault();
+    if (!key.trim()) return;
+    setKeyLoading(true);
+    setError(null);
+    try {
+      const verifyRes = await fetch(`http://localhost:3030/verify?key=${encodeURIComponent(key.trim())}&nickname=${encodeURIComponent(nickname.trim())}`);
+      const verifyData = await verifyRes.json();
+      if (verifyData.valid) {
+        onLogin(key.trim(), nickname.trim());
+      } else {
+        setError('Invalid key for this nickname.');
+      }
+    } catch {
+      setError('Could not connect to key server.');
+    }
+    setKeyLoading(false);
+  };
+
+  const handleBack = () => {
+    setStep(1);
+    setGeneratedKey(null);
+    setError(null);
+  };
+
+  return (
+    <div className="flex flex-col h-screen bg-[#09090b] rounded-xl border border-white/10 shadow-2xl overflow-hidden">
+      {/* Window Controls */}
+      <div className="h-14 flex items-center justify-between px-6 drag-region border-b border-white/5">
+        <div className="flex items-center gap-3 no-drag">
+          <div className="w-8 h-8 bg-gradient-to-br from-green-500 to-green-600 rounded-lg flex items-center justify-center shadow-lg shadow-green-500/20">
+            <span className="text-white font-bold text-sm font-dynapuff">O</span>
+          </div>
+            <span className="text-xs font-bold tracking-[0.2em] text-zinc-500 uppercase font-dynapuff">Oxevy Launcher</span>
+        </div>
+        <div className="flex items-center gap-1 no-drag">
+          <button onClick={() => window.electron.minimize()} className="p-2 hover:bg-white/5 rounded-lg transition-colors">
+            <Minus size={16} className="text-zinc-400" />
+          </button>
+          <button onClick={() => window.electron.close()} className="p-2 hover:bg-red-500/10 rounded-lg transition-colors group">
+            <X size={16} className="text-zinc-400 group-hover:text-red-400 transition-colors" />
+          </button>
+        </div>
+      </div>
+
+      <div className="flex-1 flex items-center justify-center">
+        {step === 1 && (
+          <form onSubmit={handleGetKey} className="bg-zinc-900 p-8 rounded-2xl shadow-xl border border-white/10 w-96 flex flex-col items-center">
+            <div className="w-14 h-14 bg-gradient-to-br from-green-500 to-green-600 rounded-2xl flex items-center justify-center shadow-lg shadow-green-500/20 mb-4">
+              <span className="text-white font-bold text-xl font-dynapuff">O</span>
+            </div>
+            <h2 className="text-2xl font-bold text-white mb-1">Step 1</h2>
+            <p className="text-sm text-zinc-500 mb-6">Choose a nickname to generate your key</p>
+            <input
+              type="text"
+              value={nickname}
+              onChange={e => setNickname(e.target.value)}
+              className="w-full px-4 py-3 rounded-xl border border-white/5 bg-zinc-950 text-white outline-none transition-all placeholder-zinc-600 focus:border-green-500/50 mb-4"
+              placeholder="Enter your nickname"
+              disabled={nicknameLoading}
+              maxLength={32}
+              autoFocus
+            />
+            <button
+              type="submit"
+              className="w-full py-3 rounded-xl bg-gradient-to-r from-green-500 to-green-600 hover:shadow-lg hover:shadow-green-500/25 text-white font-bold transition-all disabled:opacity-50 text-sm uppercase tracking-wider"
+              disabled={nicknameLoading || !nickname.trim()}
+            >
+              {nicknameLoading ? 'Generating...' : 'Generate Key'}
+            </button>
+            {error && <p className="text-red-400 mt-3 text-sm">{error}</p>}
+          </form>
+        )}
+        {step === 2 && (
+          <form onSubmit={handleLogin} className="bg-zinc-900 p-8 rounded-2xl shadow-xl border border-white/10 w-96 flex flex-col items-center">
+            <div className="w-14 h-14 bg-gradient-to-br from-green-500 to-green-600 rounded-2xl flex items-center justify-center shadow-lg shadow-green-500/20 mb-4">
+              <span className="text-white font-bold text-xl font-dynapuff">O</span>
+            </div>
+            <h2 className="text-2xl font-bold text-white mb-1">Step 2</h2>
+            <p className="text-sm text-zinc-500 mb-4 text-center">
+              Key generated for <span className="text-green-400 font-medium">{nickname}</span>
+              <br />
+              <span className="text-zinc-600">Get your key from the website, then paste it below</span>
+            </p>
+            <input
+              type="text"
+              value={key}
+              onChange={e => setKey(e.target.value)}
+              className="w-full px-4 py-3 rounded-xl border border-white/5 bg-zinc-950 text-white outline-none transition-all placeholder-zinc-600 focus:border-green-500/50 mb-4"
+              placeholder="Paste your key here"
+              disabled={keyLoading}
+              autoFocus
+            />
+            <button
+              type="submit"
+              className="w-full py-3 rounded-xl bg-gradient-to-r from-green-500 to-green-600 hover:shadow-lg hover:shadow-green-500/25 text-white font-bold transition-all disabled:opacity-50 text-sm uppercase tracking-wider"
+              disabled={keyLoading || !key.trim()}
+            >
+              {keyLoading ? 'Verifying...' : 'Login'}
+            </button>
+            <button
+              type="button"
+              onClick={handleBack}
+              className="mt-3 text-xs text-zinc-500 hover:text-zinc-300 transition-colors"
+            >
+              &larr; Back to nickname
+            </button>
+            {error && <p className="text-red-400 mt-3 text-sm">{error}</p>}
+          </form>
+        )}
+      </div>
+    </div>
+  );
+}
 import {
-  Home, User, Settings, Play, X, Minus, Bell, Shield, Terminal,
+  Home, User, Settings, Play, Bell, Shield, Terminal,
   Gamepad2, Download, Wifi, Clock, ChevronRight, Star, Zap,
   Monitor, Users, Award, Syringe, ExternalLink, Image, Info, AlertCircle, CheckCircle, Server,
-  RefreshCw
+  RefreshCw, LogOut
 } from 'lucide-react';
 import { motion, AnimatePresence, LayoutGroup } from 'framer-motion';
 
@@ -134,11 +285,18 @@ const PlayerProfile = ({ username }) => {
   return (
     <div className="mt-auto mb-4 relative">
       <div
-        className="relative group profile-shake"
+        className="relative group"
         onMouseEnter={() => setIsHovered(true)}
         onMouseLeave={() => setIsHovered(false)}
       >
-        <div className="w-12 h-12 mx-auto rounded-xl overflow-hidden border-2 border-white/10 hover:border-green-500/50 transition-all duration-200 cursor-pointer bg-zinc-800">
+        <motion.div
+          className="w-12 h-12 mx-auto rounded-xl overflow-hidden border-2 border-white/10 hover:border-green-500/50 cursor-pointer bg-zinc-800"
+          whileHover={{
+            x: [0, -3, 3, -2, 2, 0],
+            rotate: [0, -2, 2, -1, 1, 0],
+          }}
+          transition={{ duration: 0.4, repeat: Infinity, ease: 'easeInOut' }}
+        >
           {playerData?.avatarUrl ? (
             <img
               src={playerData.avatarUrl}
@@ -153,7 +311,7 @@ const PlayerProfile = ({ username }) => {
               <User size={24} className="text-zinc-400" />
             </div>
           )}
-        </div>
+        </motion.div>
 
         <p className="text-[10px] text-zinc-400 text-center mt-1 truncate w-16 mx-auto font-medium">
           {username}
@@ -267,7 +425,7 @@ const Sidebar = ({ activeTab, setActiveTab, username }) => {
     <div className="w-20 bg-zinc-950 flex flex-col items-center py-6 border-r border-white/5 drag-region gap-2">
       <div className="mb-8">
         <div className="w-12 h-12 bg-gradient-to-br from-green-500 to-green-600 rounded-2xl flex items-center justify-center shadow-lg shadow-green-500/20">
-          <span className="text-white font-bold text-lg">O</span>
+            <span className="text-white font-bold text-lg font-dynapuff">O</span>
         </div>
       </div>
       <LayoutGroup>
@@ -278,7 +436,9 @@ const Sidebar = ({ activeTab, setActiveTab, username }) => {
         <SidebarItem icon={Settings} active={activeTab === 'settings'} onClick={() => setActiveTab('settings')} tooltip="Settings" />
       </LayoutGroup>
 
-      <PlayerProfile username={username} />
+      <div className="mt-auto flex flex-col items-center">
+        <PlayerProfile username={username} />
+      </div>
     </div>
   );
 };
@@ -482,13 +642,15 @@ export default function App() {
 
       // Check for launcher updates
       try {
-        const response = await fetch('https://api.github.com/repos/danek123321/oxevy-2.0-luncher/releases/latest');
+        const response = await fetch('https://api.github.com/repos/danek123321/oxevy-2.0-luncher/releases?per_page=1');
         if (response.ok) {
           const data = await response.json();
-          const tag = data.tag_name?.replace('v', '').replace('V', '');
-          setLatestVersion(tag || null);
-          if (tag && tag !== currentVersion) {
-            setUpdateAvailable(true);
+          if (data.length > 0) {
+            const tag = data[0].tag_name?.replace('v', '').replace('V', '');
+            setLatestVersion(tag || null);
+            if (tag && tag !== currentVersion) {
+              setUpdateAvailable(true);
+            }
           }
         }
       } catch (_) {}
@@ -570,6 +732,8 @@ export default function App() {
   }, [activeTab, playWhoosh]);
 
   const [username, setUsername] = useState('Player');
+  const [keyLoggedIn, setKeyLoggedIn] = useState(false);
+  const [currentKey, setCurrentKey] = useState(null);
   const [isLaunching, setIsLaunching] = useState(false);
   const [isGameRunning, setIsGameRunning] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -608,6 +772,13 @@ export default function App() {
           if (config.selectedVersion) {
             setSelectedVersion(config.selectedVersion);
           }
+          if (config.keyLoggedIn) {
+            setKeyLoggedIn(true);
+            if (config.key) setCurrentKey(config.key);
+          }
+          if (config.nickname) {
+            setUsername(config.nickname);
+          }
         }
       } catch (error) {
         console.error('Failed to load config:', error);
@@ -616,14 +787,16 @@ export default function App() {
     loadConfig();
   }, []);
 
-  const saveConfig = async () => {
+  const saveConfig = async (extra = {}) => {
     try {
       await window.electron.saveUserConfig({
         username,
         memory,
         ramSlider,
         selectedVersion,
-        settings
+        settings,
+        keyLoggedIn,
+        ...extra
       });
     } catch (error) {
       console.error('Failed to save config:', error);
@@ -757,6 +930,24 @@ export default function App() {
     return () => clearInterval(interval);
   }, []);
 
+  // Periodic key verification — auto-logout if key is deleted
+  useEffect(() => {
+    if (!keyLoggedIn || !currentKey) return;
+    const checkKey = async () => {
+      try {
+        const res = await fetch(`http://localhost:3030/verify?key=${encodeURIComponent(currentKey)}&nickname=${encodeURIComponent(username)}`);
+        const data = await res.json();
+        if (!data.valid) {
+          addPopup('error', 'Key Revoked', 'Your key has been deleted. Logging out...', 6000);
+          setTimeout(() => handleLogout(), 3000);
+        }
+      } catch {}
+    };
+    checkKey();
+    const interval = setInterval(checkKey, 30000);
+    return () => clearInterval(interval);
+  }, [keyLoggedIn, currentKey, username]);
+
   const formatHours = (hours) => {
     const h = Math.floor(hours);
     const m = Math.floor((hours - h) * 60);
@@ -829,10 +1020,10 @@ export default function App() {
   const handleCheckUpdates = async () => {
     addPopup('info', 'Checking for Updates', 'Looking for new versions...', 3000);
     try {
-      const response = await fetch('https://api.github.com/repos/danek123321/oxevy-2.0-luncher/releases/latest');
+      const response = await fetch('https://api.github.com/repos/danek123321/oxevy-2.0-luncher/releases?per_page=1');
       if (response.ok) {
         const data = await response.json();
-        const tag = data.tag_name?.replace('v', '').replace('V', '');
+        const tag = data[0]?.tag_name?.replace('v', '').replace('V', '');
         setLatestVersion(tag || null);
         if (tag && tag !== currentVersion) {
           setUpdateAvailable(true);
@@ -855,6 +1046,12 @@ export default function App() {
     }
   };
 
+  const handleLogout = async () => {
+    setCurrentKey(null);
+    await saveConfig({ keyLoggedIn: false });
+    setKeyLoggedIn(false);
+  };
+
   const getGreeting = () => {
     const hour = new Date().getHours();
     if (hour < 12) return 'Good morning';
@@ -862,38 +1059,29 @@ export default function App() {
     return 'Good evening';
   };
 
+  if (!keyLoggedIn) {
+    return <KeyLogin onLogin={async (key, nickname) => {
+      setKeyLoggedIn(true);
+      setCurrentKey(key);
+      if (nickname) setUsername(nickname);
+      await saveConfig({ keyLoggedIn: true, key, nickname });
+    }} />;
+  }
+
   return (
     <div className="flex h-screen bg-[#09090b] text-zinc-300 overflow-hidden rounded-xl border border-white/10 shadow-2xl relative">
       {/* Loading Screen Overlay */}
       {isLoading && (
-        <div className="absolute inset-0 bg-[#09090b] z-[99999] flex flex-col items-center justify-center">
+        <div className="absolute inset-0 z-[999999] bg-[#09090b] flex flex-col items-center justify-center rounded-xl">
           <motion.div
             animate={{ rotate: 360 }}
             transition={{ duration: 1.5, repeat: Infinity, ease: 'linear' }}
             className="w-14 h-14 border-4 border-green-500/30 border-t-green-500 rounded-full mb-4"
           />
-          <p className="text-sm font-medium text-zinc-400 tracking-wider">Loading Oxevy...</p>
+          <p className="text-sm font-medium text-zinc-400 tracking-wider font-dynapuff">Loading Oxevy...</p>
           {!oxevyInstalled && oxevyInstalled !== null && (
             <p className="text-xs text-amber-400 mt-2">Installing Oxevy mod...</p>
           )}
-        </div>
-      )}
-
-      {/* Update Banner */}
-      {updateAvailable && latestVersion && (
-        <div className="absolute top-0 left-0 right-0 z-[99998] bg-amber-500/20 border-b border-amber-500/40 backdrop-blur-sm">
-          <div className="flex items-center justify-center gap-3 px-4 py-2 text-sm">
-            <Info size={16} className="text-amber-400" />
-            <span className="text-amber-100 font-medium">
-              Update v{latestVersion} available! Restart the launcher to update.
-            </span>
-            <button
-              onClick={() => window.electron.closeLauncher()}
-              className="text-xs bg-amber-500 hover:bg-amber-600 text-white px-3 py-1 rounded-lg transition-colors font-medium"
-            >
-              Restart & Update
-            </button>
-          </div>
         </div>
       )}
 
@@ -901,7 +1089,25 @@ export default function App() {
       <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} username={username} />
 
       {/* Main Content */}
-      <div className="flex-1 flex flex-col relative overflow-hidden">
+      <div className="flex-1 flex flex-col overflow-hidden">
+        {/* Update Banner */}
+        {updateAvailable && latestVersion && (
+          <div className="relative z-[99999] bg-amber-500/20 border-b border-amber-500/40 backdrop-blur-sm">
+            <div className="flex items-center justify-center gap-3 px-4 py-2 text-sm">
+              <Info size={16} className="text-amber-400" />
+              <span className="text-amber-100 font-medium">
+                Update v{latestVersion} available! Restart the launcher to update.
+              </span>
+              <button
+                onClick={() => window.electron.closeLauncher()}
+                className="text-xs bg-amber-500 hover:bg-amber-600 text-white px-3 py-1 rounded-lg transition-colors font-medium"
+              >
+                Restart & Update
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Top Bar */}
         <div className="h-14 flex items-center justify-between px-6 drag-region border-b border-white/5">
           <div className="flex items-center gap-4 no-drag">
@@ -997,7 +1203,7 @@ export default function App() {
                     >
                       <AlertCircle size={20} className="text-amber-400 flex-shrink-0 mt-0.5" />
                       <div className="flex-1">
-                        <h3 className="text-sm font-bold text-amber-400 mb-1">Oxevy Mod Not Installed</h3>
+                        <h3 className="text-sm font-bold text-amber-400 mb-1 font-dynapuff">Oxevy Mod Not Installed</h3>
                         <p className="text-xs text-zinc-400 mb-3">
                           The Oxevy mod is required to use this launcher. Click below to download it from GitHub.
                         </p>
@@ -1043,9 +1249,7 @@ export default function App() {
                         <Bell size={18} className="text-green-400" />
                         Latest Updates
                       </h2>
-                      <button className="text-xs text-green-400 hover:text-green-300 transition-colors font-medium">
-                        View All
-                      </button>
+
                     </div>
                     <div className="space-y-2">
                       <NewsCard
@@ -1377,6 +1581,17 @@ export default function App() {
                       </button>
                     </div>
                   ))}
+                </div>
+
+                {/* Logout */}
+                <div className="mt-6 pt-6 border-t border-white/5">
+                  <button
+                    onClick={handleLogout}
+                    className="w-full py-3 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 hover:bg-red-500/20 font-bold transition-all text-sm uppercase tracking-wider flex items-center justify-center gap-2"
+                  >
+                    <LogOut size={16} />
+                    Logout
+                  </button>
                 </div>
               </motion.div>
             )}

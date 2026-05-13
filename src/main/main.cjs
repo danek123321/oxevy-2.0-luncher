@@ -4,7 +4,7 @@ const fs = require('fs');
 const { Client, Authenticator } = require('minecraft-launcher-core');
 const fetch = require('node-fetch');
 
-const projectRoot = path.resolve(__dirname, '../../../');
+const projectRoot = path.resolve(__dirname, '../../../../');
 const gradlePropertiesPath = path.join(projectRoot, 'gradle.properties');
 const distIndexPath = path.join(__dirname, '../../dist/index.html');
 const configPath = path.join(app.getPath('userData'), 'launcher-config.json');
@@ -276,25 +276,38 @@ function createWindow() {
 
 app.whenReady().then(createWindow);
 
-const OXEVY_DOWNLOAD_URL = 'https://github.com/danek123321/oxevy-2.0/releases/download/BETA-0.5/oxevy-2.0-BETA-0.5.jar';
+const OXEVY_RELEASES_API = 'https://api.github.com/repos/danek123321/oxevy-2.0/releases/latest';
 const MOD_FILENAME = 'oxevy.jar';
 
 function isOxevyInstalled() {
-  const projectConfig = getProjectConfig();
-  const modJarPath = resolveModJar();
-  return modJarPath !== null;
+  const rootDir = getGameRootDir();
+  const modPath = path.join(rootDir, 'mods', MOD_FILENAME);
+  return fs.existsSync(modPath);
 }
 
 async function downloadOxevyMod(rootDir) {
   const modsDir = path.join(rootDir, 'mods');
   fs.mkdirSync(modsDir, { recursive: true });
 
-  const modPath = path.join(modsDir, MOD_FILENAME);
-  const response = await fetch(OXEVY_DOWNLOAD_URL);
+  // Get latest release info from GitHub API
+  const response = await fetch(OXEVY_RELEASES_API);
   if (!response.ok) {
-    throw new Error(`Failed to download Oxevy: ${response.status} ${response.statusText}`);
+    throw new Error(`Failed to fetch Oxevy releases: ${response.status} ${response.statusText}`);
   }
-  const buffer = await response.arrayBuffer();
+  const release = await response.json();
+
+  // Find the jar asset
+  const jarAsset = release.assets?.find((a) => a.name.endsWith('.jar'));
+  if (!jarAsset) {
+    throw new Error('No jar asset found in the latest Oxevy release.');
+  }
+
+  const modPath = path.join(modsDir, MOD_FILENAME);
+  const jarResponse = await fetch(jarAsset.browser_download_url);
+  if (!jarResponse.ok) {
+    throw new Error(`Failed to download Oxevy: ${jarResponse.status} ${jarResponse.statusText}`);
+  }
+  const buffer = await jarResponse.arrayBuffer();
   fs.writeFileSync(modPath, Buffer.from(buffer));
   return modPath;
 }
@@ -337,7 +350,19 @@ ipcMain.handle('launch-game', async (event, { username, memory }) => {
   const rootDir = getGameRootDir();
   const modsDir = path.join(rootDir, 'mods');
   const projectConfig = getProjectConfig();
-  const modJarPath = resolveModJar();
+  let modJarPath = resolveModJar();
+
+  // If no jar in build/libs, check if it was downloaded to game/mods
+  if (!modJarPath) {
+    const downloadedModPath = path.join(modsDir, MOD_FILENAME);
+    if (fs.existsSync(downloadedModPath)) {
+      modJarPath = downloadedModPath;
+    }
+  }
+
+  if (!modJarPath) {
+    return { success: false, error: 'No built mod jar found in build/libs. Run ./gradlew build first, or install the Oxevy mod from the home tab.' };
+  }
 
   try {
     sendToRenderer(event.sender, 'launch-state', { state: 'preparing' });
@@ -345,13 +370,13 @@ ipcMain.handle('launch-game', async (event, { username, memory }) => {
     // Create oxevy config directory with default files
     const oxevyDir = path.join(rootDir, 'oxevy');
     fs.mkdirSync(oxevyDir, { recursive: true });
-    
+
     const defaultConfigFiles = {
       'commands.json': '[]',
       'modules.json': '{}',
       'friends.json': '[]'
     };
-    
+
     for (const [filename, defaultContent] of Object.entries(defaultConfigFiles)) {
       const filePath = path.join(oxevyDir, filename);
       if (!fs.existsSync(filePath)) {
@@ -360,7 +385,30 @@ ipcMain.handle('launch-game', async (event, { username, memory }) => {
       }
     }
 
-    await deployModJar(modJarPath, modsDir, projectConfig.minecraftVersion, projectConfig.loaderVersion, rootDir);
+    // Only copy mod if it's from build/libs (not already in mods dir)
+    if (modJarPath !== path.join(modsDir, MOD_FILENAME)) {
+      await deployModJar(modJarPath, modsDir, projectConfig.minecraftVersion, projectConfig.loaderVersion, rootDir);
+    } else {
+      // Still need Fabric API even if mod is already in place
+      const fabricApiPath = path.join(modsDir, 'fabric-api.jar');
+      const fabricApiUrl = `https://cdn.modrinth.com/data/P7dR8mSH/versions/i5tSkVBH/fabric-api-0.141.3+1.21.11.jar`;
+      if (!fs.existsSync(fabricApiPath)) {
+        try {
+          console.log(`[launcher] Downloading Fabric API from: ${fabricApiUrl}`);
+          const response = await fetch(fabricApiUrl);
+          if (response.ok) {
+            const buffer = await response.arrayBuffer();
+            fs.writeFileSync(fabricApiPath, Buffer.from(buffer));
+            console.log('[launcher] Fabric API installed successfully');
+          } else {
+            console.log(`[launcher] Failed to download Fabric API: ${response.status}`);
+          }
+        } catch (error) {
+          console.log(`[launcher] Could not download Fabric API: ${error.message}`);
+        }
+      }
+    }
+
     const repairedArchives = repairGameArchives(rootDir);
     if (repairedArchives.length > 0) {
       console.log('[launcher] Removed invalid game archives:', repairedArchives);
